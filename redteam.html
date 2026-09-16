@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>GENERTIA-LLM — Red-Team Probe Generation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{ --ash:#e8eaed; --ash2:#dfe2e6; --surface:#ffffff; --ink:#232a33; --muted:#5c6672;
+ --line:#c9cdd3; --accent:#37618f; --accent2:#2b4f77; }
+*{box-sizing:border-box} html,body{margin:0}
+body{background:var(--ash);color:var(--ink);font-family:Inter,system-ui,sans-serif}
+.wrap{max-width:1500px;margin:0 auto;padding:18px 22px 40px}
+header{text-align:center}
+header h1{font-weight:700;font-size:clamp(20px,2.8vw,32px);margin:0 0 2px;letter-spacing:-.01em}
+header .sub{color:var(--muted);font-size:14px;margin-bottom:10px}
+.summary{max-width:1150px;margin:4px auto 8px;font-size:13px;line-height:1.55}
+.summary .h{font-weight:700;font-size:14px;margin-bottom:3px;display:block}
+.stagewrap{width:100vw;margin-left:calc(50% - 50vw);overflow:visible}
+#graph{width:100%;height:66vh;min-height:440px;overflow:visible;position:relative}
+.loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px}
+
+.poptmp{transform-box:fill-box;transform-origin:center center}
+.poptmp.go{animation:gpop .55s cubic-bezier(.2,.85,.25,1)}
+@keyframes gpop{0%{transform:scale(.4)}60%{transform:scale(1.08)}100%{transform:scale(1)}}
+.gflash{animation:gfl 1s ease}
+@keyframes gfl{0%,100%{filter:none}45%{filter:drop-shadow(0 0 7px #37618f)}}
+
+#fitness{margin:10px auto 0;max-width:1150px;padding:10px 14px;border:1px solid var(--line);border-left:4px solid var(--accent);
+ border-radius:8px;background:var(--surface);font-size:13.5px;opacity:0;transform:translateY(6px);transition:opacity .45s,transform .45s}
+#fitness.on{opacity:1;transform:none}
+#fitness .mono{font-family:ui-monospace,Menlo,Consolas,monospace;background:#eef1f4;padding:2px 6px;border-radius:5px}
+
+.controls{display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap;position:relative;z-index:60}
+#annot{position:fixed;left:0;top:0;width:100vw;height:100vh;z-index:40;pointer-events:none;touch-action:none}
+button.nav{font-weight:600;font-size:15px;border:none;cursor:pointer;border-radius:9px;padding:11px 20px;color:#fff;background:var(--accent)}
+button.nav:hover{background:var(--accent2)} button.nav.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+button.nav:disabled{opacity:.45;cursor:default}
+button.nav.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.sketch-edit{position:fixed;z-index:70;font:11.5px Inter,system-ui,sans-serif;padding:2px 4px;border:1.5px solid var(--accent);border-radius:5px;background:#fff;color:#111;box-shadow:0 8px 20px -8px rgba(0,0,0,.4);resize:both;line-height:1.25;overflow:auto}
+.stepmeta{flex:1;min-width:260px} .stepmeta .st{font-weight:700;font-size:16px}
+.stepmeta .sd{color:#444c58;font-size:13.5px;line-height:1.5;margin-top:2px}
+.count{color:var(--muted);font-size:13px;min-width:56px;text-align:right;font-variant-numeric:tabular-nums}
+.track{height:5px;background:var(--ash2);border:1px solid var(--line);border-radius:99px;margin-top:12px;overflow:hidden}
+.track>div{height:100%;width:0;background:var(--accent);transition:width .35s ease}
+.hint{color:var(--muted);font-size:12.5px;margin-top:8px}
+
+.dock{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;align-items:flex-end;gap:9px;z-index:60}
+.fab{display:flex;gap:7px}
+.fab button{font-weight:600;font-size:13px;cursor:pointer;border-radius:999px;padding:9px 15px;border:1px solid var(--line);
+ background:var(--surface);color:var(--ink);box-shadow:0 6px 18px -10px rgba(0,0,0,.35)}
+.fab button.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.console{width:min(440px,92vw);max-height:min(66vh,580px);overflow:auto;background:var(--surface);border:1px solid var(--line);
+ border-radius:12px;padding:13px 15px;display:none;box-shadow:0 24px 60px -24px rgba(0,0,0,.4)}
+.console.open{display:block}
+.console h3{margin:2px 0 10px;font-size:15px;display:flex;justify-content:space-between} .console h3 .x{cursor:pointer;color:var(--muted)}
+.row{display:grid;grid-template-columns:66px 1fr;gap:10px;padding:8px 0;border-top:1px solid #e7e9ec} .row:first-of-type{border-top:none}
+.tag{font-weight:700;font-size:12.5px} .tech{font-size:12px;color:#2f3742;line-height:1.4}
+.plain{font-size:11.5px;color:var(--accent2);line-height:1.4;margin-top:3px;font-style:italic} .plain2{font-size:12px;color:#2f3742;line-height:1.45}
+table{width:100%;border-collapse:collapse;font-size:11.5px} td{border:1px solid #dfe2e6;padding:4px 6px;vertical-align:top}
+td.st{text-align:center;font-weight:700;width:34px} td.st.ok{background:#e6f4ec;color:#1f7a45}
+td.st.part{background:#fbf1de;color:#9a6a12} td.st.later{background:#eee9f2;color:#6d5a86} td.nt{color:var(--muted);width:34%}
+
+ul.gob{max-width:1150px;margin:4px auto 8px;padding-left:20px;font-size:13px;line-height:1.5;text-align:left}
+ul.gob li{margin:3px 0}
+#pop{position:fixed;z-index:60;max-width:340px;background:var(--surface);border:1px solid var(--line);border-radius:12px;
+ box-shadow:0 24px 60px -20px rgba(0,0,0,.45);padding:12px 14px;opacity:0;transform:scale(.92);transform-origin:top left;
+ pointer-events:none;transition:opacity .18s ease,transform .2s cubic-bezier(.2,.8,.2,1)}
+#pop.on{opacity:1;transform:scale(1);pointer-events:auto}
+#pop .ph{font-weight:700;font-size:14px;margin:0 18px 4px 0}
+#pop .pw{font-size:12.5px;color:#333c47;line-height:1.45;margin-bottom:8px}
+#pop table{width:100%;border-collapse:collapse;font-size:11.5px}
+#pop td{border:none;padding:3px 4px;vertical-align:top}
+#pop td.dir{white-space:nowrap;font-weight:700;width:44px}
+#pop td.din{color:#1f7a45} #pop td.dout{color:var(--accent)}
+#pop .note{margin-top:8px;font-size:11.5px;color:#8a6a12;background:#fbf1de;border-radius:6px;padding:6px 8px}
+#pop .cls{position:absolute;top:7px;right:11px;cursor:pointer;color:var(--muted);font-size:13px}
+
+.edgeflash{pointer-events:none}
+@keyframes ewpulse{0%{filter:none}35%{filter:drop-shadow(0 0 6px #ffcf33)}100%{filter:none}}
+.ewpulse{animation:ewpulse .95s ease}
+@media (prefers-reduced-motion:reduce){.poptmp,#fitness,.ewpulse,.edgeflash{transition:none!important;animation:none!important;transform:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+ <header>
+  <h1>Red-Team Probe Generation</h1>
+  <div class="sub">GENERTIA-LLM co-evolution · SLM-guided evolution of red packets (datapath triples)</div>
+ </header>
+ <section class="summary"><span class="h" style="font-weight:700">Goal, Objective &amp; Summary</span><ul class="gob"><li><b>Goal:</b> find where today&rsquo;s immune system (AIS-IDS) is blind &mdash; generate attack &lsquo;red packets&rsquo; that slip past current detectors while still looking realistic.</li><li><b>Objective:</b> use a small language model (SLM-A) as the mutation operator, steered by an evolutionary loop (GRT); ground each proposal into a schema-valid, self-preserving triple; and bank the promising / uncovered ones for evaluation.</li><li><b>Summary:</b> GRT tells SLM-A what&rsquo;s uncovered; SLM-A suggests how to mutate an attack; the grounder&#9670; turns that into a precise triple and checks it against the guard. Whatever lands in a gap is saved to the Candidate pool and Holes repo and remembered (ExpRAG) for the next generation.</li></ul></section>
+</div>
+<div class="stagewrap"><div id="graph"></div><div class="loading" id="loading">Loading the diagram…</div></div>
+<div class="wrap">
+ <div id="fitness"><b>Selection rule &mdash; applied by GRT each generation:</b> keep the top-&#956; candidates by fitness &nbsp;<span class="mono">f = w&#8321;&#183;edge_gap + w&#8322;&#183;self_margin + w&#8323;&#183;judge_realism &#8722; penalties</span>&nbsp;<i>(judge_realism is added in Phase&nbsp;3).</i></div>
+ <div class="controls">
+  <button class="nav ghost" id="prev">&#8592; Back</button>
+  <button class="nav" id="next">Next &#8594;</button>
+  <button class="nav ghost" id="reset">Restart</button>
+  <button class="nav ghost" id="sketch">&#9998; Sketch: off</button>
+  <button class="nav ghost" id="draw">&#9998; Draw: off</button>
+  <input type="color" id="pencolor" value="#d83a2f" title="Pen colour" style="width:34px;height:30px;border:1px solid var(--line);border-radius:8px;background:#fff;padding:2px;cursor:pointer">
+  <input type="range" id="pensize" min="1" max="24" value="3" title="Pen size" style="width:78px">
+  <button class="nav ghost" id="eraser">Eraser</button>
+  <button class="nav ghost" id="clearink">Clear ink</button>
+  <div class="stepmeta"><div class="st" id="stTitle"></div><div class="sd" id="stDesc"></div></div>
+  <div class="count" id="count"></div>
+ </div>
+ <div class="track"><div id="bar"></div></div>
+ <div class="hint">Next / Back or the &#8592; &#8594; arrow keys. Drag any node — its edges stay connected and reflow. Turn on <b>Sketch</b> to edit text, delete edges/nodes or draw new ones (Delete key removes the selection). Consoles at bottom-right hold the edge guide, terminology and checklist.</div>
+</div>
+
+<div id="pop"></div>
+<canvas id="annot"></canvas>
+<div class="dock">
+ <div class="console" id="c-edges"><h3>Edge guide <span class="x" data-close>&#10005;</span></h3><div class="row"><div class="tag">A1</div><div><div class="tech">GRT&#8594;SLM-A: deterministic AIS&#8594;Vibe brief (1.2) &mdash; holes digest + self-margin hints as natural language.</div><div class="plain">the coach hands the attacker a note: where the guard isn&rsquo;t looking, and how close to normal to stay.</div></div></div><div class="row"><div class="tag">A2</div><div><div class="tech">SLM-A&#8594;GND&#9670;: the attacker proposes a mutation in language (&lsquo;push dstService toward pii-lookup, widen featureVec dim&nbsp;3&rsquo;).</div><div class="plain">the attacker answers in everyday words &mdash; a hunch about what to try next.</div></div></div><div class="row"><div class="tag">A3</div><div><div class="tech">GND&#9670;&#8594;AIS: the grounder (1.3) parses the intent into a schema-valid triple and asks AIS to score it.</div><div class="plain">a translator turns the loose idea into an exact, checked attack and asks &lsquo;would you catch this?&rsquo;</div></div></div><div class="row"><div class="tag">A4</div><div><div class="tech">AIS&#8594;GRT: returns edge_gap, self_margin and whether the &#946; false-positive budget holds.</div><div class="plain">the guard sends back a scorecard: how catchable, how normal-looking, and whether flagging it would annoy real users.</div></div></div><div class="row"><div class="tag">B1</div><div><div class="tech">GRT&#8646;D4 (ExpRAG): read warm-start &mdash; top-k past trajectories seed this generation.</div><div class="plain">look up what worked before instead of starting from scratch.</div></div></div><div class="row"><div class="tag">B2</div><div><div class="tech">GRT&#8646;D2 (RSD): read the ranked strategy/strength distribution to bias which regions to probe.</div><div class="plain">check the leaderboard of attack styles that pay off.</div></div></div><div class="row"><div class="tag">B3</div><div><div class="tech">GRT&#8594;D6: pull run parameters {&#946;, k, &#964;, &#963;, &#955;}.</div><div class="plain">read the run&rsquo;s settings.</div></div></div><div class="row"><div class="tag">C1</div><div><div class="tech">GRT&#8594;Candidate pool: write the evolved triple {id, srcZone, dstService, featureVec, provenance}.</div><div class="plain">save every promising attack to a shortlist.</div></div></div><div class="row"><div class="tag">C2</div><div><div class="tech">GRT&#8594;D4: append the trajectory {parent, gen, reward}.</div><div class="plain">file the whole attempt away as memory.</div></div></div><div class="row"><div class="tag">C3</div><div><div class="tech">GRT&#8594;D2: update the strategy embedding + strength.</div><div class="plain">give winning styles more attention next time.</div></div></div><div class="row"><div class="tag">C4</div><div><div class="tech">AIS&#8594;D3: log any uncovered point as a hole {triple, nearestGap, selfMargin}.</div><div class="plain">record each blind spot for defenders to patch.</div></div></div><div class="row"><div class="tag">C5</div><div><div class="tech">AIS&#8594;Telemetry: log rounds, tokens, diversity entropy.</div><div class="plain">track basic run stats: time, cost, variety.</div></div></div><div class="row"><div class="tag">Guard&#9670;</div><div><div class="tech">if grounding is invalid, retry up to k times, then fall back to a plain GA mutation.</div><div class="plain">if the translator can&rsquo;t parse the idea, fall back to a simple random tweak instead of stalling.</div></div></div></div>
+ <div class="console" id="c-terms"><h3>Key terminology <span class="x" data-close>&#10005;</span></h3><div class="row"><div class="tag">Red packet / triple</div><div class="plain2">&#10216;srcZone, dstService, featureVec&#8712;[0,1]^d&#10217; &mdash; the atomic attack sample the red team evolves.</div></div><div class="row"><div class="tag">Vibe / vibe intent</div><div class="plain2">the SLM&rsquo;s mutation expressed in natural language, before grounding.</div></div><div class="row"><div class="tag">Grounding (&#9670;)</div><div class="plain2">deterministic parse of a vibe intent into a validated triple (bridge&nbsp;1.3); the novel step.</div></div><div class="row"><div class="tag">edge_gap</div><div class="plain2">distance to the nearest AIS detector; large gap = likely blind spot.</div></div><div class="row"><div class="tag">self_margin</div><div class="plain2">distance to the self-set S; kept clear so future detectors don&rsquo;t flag legit traffic.</div></div><div class="row"><div class="tag">&#946; budget</div><div class="plain2">allowed false-positive rate on the self-set; breaches are penalised.</div></div><div class="row"><div class="tag">Self-set S (D1)</div><div class="plain2">legitimate traffic that must never be flagged; self_margin measures distance to it.</div></div><div class="row"><div class="tag">ExpRAG (D4)</div><div class="plain2">episodic memory of past trajectories; warm-starts and stores rewards.</div></div><div class="row"><div class="tag">RSD (D2)</div><div class="plain2">ranked strategy/strength distribution &mdash; which regions have paid off.</div></div><div class="row"><div class="tag">Hole (D3)</div><div class="plain2">an uncovered non-self point the AIS missed; target for the blue team.</div></div><div class="row"><div class="tag">Provenance</div><div class="plain2">{parent, gen, guidedBy} &mdash; lineage of a triple.</div></div><div class="row"><div class="tag">Warm-start</div><div class="plain2">seeding a generation with retrieved trajectories instead of random init.</div></div><div class="row"><div class="tag">GA fallback</div><div class="plain2">plain genetic-algorithm mutation used when grounding keeps failing.</div></div></div>
+ <div class="console" id="c-check"><h3>Architecture checklist <span class="x" data-close>&#10005;</span></h3>
+   <table><tr><td><b>Component / claim</b></td><td class="st"><b>Ph2</b></td><td class="nt"><b>Where</b></td></tr><tr><td>Co-evolution loop (attacker &#8596; defender)</td><td class="st part">&#9681;</td><td class="nt">red half; blue Ph5&#8211;6</td></tr><tr><td>1.2 AIS&#8594;Vibe encoder</td><td class="st ok">&#10003;</td><td class="nt">A1</td></tr><tr><td>1.3 Vibe&#8594;AIS grounder &#9670;</td><td class="st ok">&#10003;</td><td class="nt">A2&#8594;A3</td></tr><tr><td>4.2/5.5 Detector synth + grounder &#9670;</td><td class="st later">&#8212;</td><td class="nt">Phase 5</td></tr><tr><td>ExpRAG episodic memory (D4)</td><td class="st ok">&#10003;</td><td class="nt">B1 / C2</td></tr><tr><td>Population-based GA + fallback</td><td class="st ok">&#10003;</td><td class="nt">GRT loop</td></tr><tr><td>Warm-start from memory</td><td class="st ok">&#10003;</td><td class="nt">B1</td></tr><tr><td>RSD ranked strategy (D2)</td><td class="st ok">&#10003;</td><td class="nt">B2 / C3</td></tr><tr><td>Holes repository (D3)</td><td class="st ok">&#10003;</td><td class="nt">C4</td></tr><tr><td>FP guard  r &#8804; dist &#8722; margin</td><td class="st later">&#8212;</td><td class="nt">Phase 5</td></tr><tr><td>&#946; false-positive budget check</td><td class="st part">&#9681;</td><td class="nt">A4</td></tr><tr><td>Self-set S preservation (D1)</td><td class="st part">&#9681;</td><td class="nt">self_margin</td></tr><tr><td>Multi-channel reward</td><td class="st part">&#9681;</td><td class="nt">realism Ph3</td></tr><tr><td>Judge realism scoring</td><td class="st later">&#8212;</td><td class="nt">Phase 3</td></tr><tr><td>Run config (D6)</td><td class="st ok">&#10003;</td><td class="nt">B3</td></tr><tr><td>Telemetry / metrics</td><td class="st ok">&#10003;</td><td class="nt">C5</td></tr></table>
+   <div class="hint">&#10003; met here · &#9681; partial · &#8212; later phase</div></div>
+ <div class="fab"><button data-c="c-edges">Edges</button><button data-c="c-terms">Terms</button><button data-c="c-check">Checklist</button></div>
+</div>
+
+<script src="https://viewer.diagrams.net/js/viewer.min.js"></script>
+<script>
+const XML = `<mxfile host="app.diagrams.net"><diagram id="p2" name="Architecture &#183; Red-Team Probe Generation (banded)"><mxGraphModel dx="1600" dy="1000" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1560" pageHeight="780" math="0" shadow="0"><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="GRT" value="" style="points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=#F54749;gradientDirection=north;fillColor=#999999;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.step_functions;" vertex="1" parent="1"><mxGeometry x="120" y="178" width="80" height="80" as="geometry"/></mxCell><mxCell id="GRT_l" value="&lt;b&gt;GRT &#183; Genetic Red-Team&lt;br&gt;(evolution loop)&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5b6b7a&quot; style=&quot;font-size:9px&quot;&gt;the attack coach that runs the trial-and-error loop&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="65" y="264" width="190" height="50" as="geometry"/></mxCell><mxCell id="SLMA" value="" style="points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=#F54749;gradientDirection=north;fillColor=#999999;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.sagemaker;" vertex="1" parent="1"><mxGeometry x="470" y="178" width="80" height="80" as="geometry"/></mxCell><mxCell id="SLMA_l" value="&lt;b&gt;SLM-A &#183; Attacker&lt;br&gt;micro-agent&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5b6b7a&quot; style=&quot;font-size:9px&quot;&gt;a small AI that suggests how to tweak an attack&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="415" y="264" width="190" height="50" as="geometry"/></mxCell><mxCell id="GND" value="" style="points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=#F54749;gradientDirection=north;fillColor=#999999;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.glue;" vertex="1" parent="1"><mxGeometry x="820" y="178" width="80" height="80" as="geometry"/></mxCell><mxCell id="GND_l" value="&lt;b&gt;GND&#9670; &#183; Vibe&#8594;AIS Grounder&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5b6b7a&quot; style=&quot;font-size:9px&quot;&gt;translator: turns the AI&#39;s idea into an exact, checked attack&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="765" y="264" width="190" height="50" as="geometry"/></mxCell><mxCell id="AIS" value="" style="points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;gradientColor=#F54749;gradientDirection=north;fillColor=#999999;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.guardduty;" vertex="1" parent="1"><mxGeometry x="1170" y="178" width="80" height="80" as="geometry"/></mxCell><mxCell id="AIS_l" value="&lt;b&gt;AIS-IDS &#183; Negative&lt;br&gt;selection engine&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5b6b7a&quot; style=&quot;font-size:9px&quot;&gt;the guard / immune system: decides catch vs. miss&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1115" y="264" width="190" height="50" as="geometry"/></mxCell><mxCell id="A1" style="endArrow=classic;html=1;strokeColor=#333;exitX=1;exitY=0.45;exitDx=0;exitDy=0;entryX=0;entryY=0.45;entryDx=0;entryDy=0;" edge="1" parent="1" source="GRT" target="SLMA"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="A1L" value="&lt;b&gt;A1.&lt;/b&gt; AIS&#8594;Vibe brief&lt;br&gt;holes digest + self-margin hints" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="A1"><mxGeometry relative="1" x="0" as="geometry"><mxPoint x="0" y="-20" as="offset"/></mxGeometry></mxCell><mxCell id="A2" style="endArrow=classic;html=1;strokeColor=#333;exitX=1;exitY=0.45;exitDx=0;exitDy=0;entryX=0;entryY=0.45;entryDx=0;entryDy=0;" edge="1" parent="1" source="SLMA" target="GND"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="A2L" value="&lt;b&gt;A2.&lt;/b&gt; vibe intent&lt;br&gt;&quot;push dstService&#8594;pii-lookup, widen featVec[3]&quot;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="A2"><mxGeometry relative="1" x="0" as="geometry"><mxPoint x="0" y="-20" as="offset"/></mxGeometry></mxCell><mxCell id="A3" style="endArrow=classic;html=1;strokeColor=#333;exitX=1;exitY=0.45;exitDx=0;exitDy=0;entryX=0;entryY=0.45;entryDx=0;entryDy=0;" edge="1" parent="1" source="GND" target="AIS"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="A3L" value="&lt;b&gt;A3.&lt;/b&gt; validate &#916;&lt;br&gt;triple&#10216;srcZone, dstService, featureVec&#8712;[0,1]^d&#10217;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="A3"><mxGeometry relative="1" x="0" as="geometry"><mxPoint x="0" y="-20" as="offset"/></mxGeometry></mxCell><mxCell id="A4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=classic;html=1;jettySize=auto;strokeColor=#333;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="AIS" target="GRT"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1210" y="330"/><mxPoint x="160" y="330"/></Array></mxGeometry></mxCell><mxCell id="A4L" value="&lt;b&gt;A4.&lt;/b&gt; verdict :: edge_gap, self_margin, &#946;-budget ok?" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="A4"><mxGeometry relative="1" x="0" as="geometry"><mxPoint x="0" y="-10" as="offset"/></mxGeometry></mxCell><mxCell id="guard" value="&#9670; guard: retry &lt;i&gt;k&lt;/i&gt; &#8594; GA fallback" style="text;html=1;align=left;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fontColor=#7A3E00;" vertex="1" parent="1"><mxGeometry x="760" y="360" width="210" height="20" as="geometry"/></mxCell><mxCell id="D4c" value="" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;strokeColor=#FFFFFF;fillColor=#FF0000;" vertex="1" parent="1"><mxGeometry x="128" y="560" width="64" height="82" as="geometry"/></mxCell><mxCell id="D4c_l" value="&lt;b&gt;D4 &#183; ExpRAG index&lt;br&gt;(episodic ANN)&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5b6b7a&quot; style=&quot;font-size:9px&quot;&gt;memory of past attempts (what worked)&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="65" y="648" width="190" height="44" as="geometry"/></mxCell><mxCell id="D2c" value="" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;strokeColor=#FFFFFF;fillColor=#FF0000;" vertex="1" parent="1"><mxGeometry x="478" y="560" width="64" height="82" as="geometry"/></mxCell><mxCell id="D2c_l" value="&lt;b&gt;D2 &#183; RSD bank&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5b6b7a&quot; style=&quot;font-size:9px&quot;&gt;leaderboard of attack styles that pay off&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="415" y="648" width="190" height="44" as="geometry"/></mxCell><mxCell id="CANDc" value="" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;strokeColor=#FFFFFF;fillColor=#FF0000;" vertex="1" parent="1"><mxGeometry x="828" y="560" width="64" height="82" as="geometry"/></mxCell><mxCell id="CANDc_l" value="&lt;b&gt;Candidate pool&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5b6b7a&quot; style=&quot;font-size:9px&quot;&gt;shortlist of new attacks to test next&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="765" y="648" width="190" height="44" as="geometry"/></mxCell><mxCell id="D3c" value="" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;strokeColor=#FFFFFF;fillColor=#FF0000;" vertex="1" parent="1"><mxGeometry x="1178" y="560" width="64" height="82" as="geometry"/></mxCell><mxCell id="D3c_l" value="&lt;b&gt;D3 &#183; Holes repo&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5b6b7a&quot; style=&quot;font-size:9px&quot;&gt;list of blind spots to patch later&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1115" y="648" width="190" height="44" as="geometry"/></mxCell><mxCell id="bD4" value="&#9654; &lt;b style=&quot;background-color: rgb(204,0,0)&quot;&gt;&lt;font color=&quot;#fafafa&quot;&gt;traj{parent,gen,reward}&lt;/font&gt;&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;" vertex="1" parent="1"><mxGeometry x="65" y="698" width="190" height="22" as="geometry"/></mxCell><mxCell id="bD2" value="&#9654; &lt;b style=&quot;background-color: rgb(102,102,102)&quot;&gt;&lt;font color=&quot;#fafafa&quot;&gt;stratEmb, strength&lt;/font&gt;&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;" vertex="1" parent="1"><mxGeometry x="415" y="698" width="190" height="22" as="geometry"/></mxCell><mxCell id="bC" value="&#9654; &lt;b style=&quot;background-color: rgb(0,140,60)&quot;&gt;&lt;font color=&quot;#fafafa&quot;&gt;triple&#10216;z,s,v&#10217; +prov&lt;/font&gt;&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;" vertex="1" parent="1"><mxGeometry x="765" y="698" width="190" height="22" as="geometry"/></mxCell><mxCell id="bD3" value="&#9654; &lt;b style=&quot;background-color: rgb(216,127,0)&quot;&gt;&lt;font color=&quot;#fafafa&quot;&gt;hole{gap, selfMargin}&lt;/font&gt;&lt;/b&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;" vertex="1" parent="1"><mxGeometry x="1115" y="698" width="190" height="22" as="geometry"/></mxCell><mxCell id="E_D4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=classic;html=1;jettySize=auto;strokeColor=#333;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="GRT" target="D4c"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="160" y="440"/><mxPoint x="160" y="440"/></Array></mxGeometry></mxCell><mxCell id="E_D4L" value="&lt;b&gt;B1&lt;/b&gt; read warm-start &#183; &lt;b&gt;C2&lt;/b&gt; append traj" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="E_D4"><mxGeometry relative="1" x="0" as="geometry"><mxPoint x="0" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="E_D2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=classic;html=1;jettySize=auto;strokeColor=#333;exitX=0.6;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="GRT" target="D2c"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="190" y="430"/><mxPoint x="510" y="430"/></Array></mxGeometry></mxCell><mxCell id="E_D2L" value="&lt;b&gt;B2&lt;/b&gt; read RSD &#183; &lt;b&gt;C3&lt;/b&gt; write stratEmb" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="E_D2"><mxGeometry relative="1" x="0" as="geometry"><mxPoint x="0" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="E_C" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=classic;html=1;jettySize=auto;strokeColor=#008C3C;exitX=0.75;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="GRT" target="CANDc"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="220" y="480"/><mxPoint x="860" y="480"/></Array></mxGeometry></mxCell><mxCell id="E_CL" value="&lt;b&gt;C1&lt;/b&gt; write evolved triple {id, z, s, v, provenance}" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="E_C"><mxGeometry relative="1" x="0" as="geometry"><mxPoint x="0" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="E_D3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=classic;html=1;jettySize=auto;strokeColor=#D87F00;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="AIS" target="D3c"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1210" y="470"/><mxPoint x="1210" y="470"/></Array></mxGeometry></mxCell><mxCell id="E_D3L" value="&lt;b&gt;C4&lt;/b&gt; log uncovered &#8594; hole" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="E_D3"><mxGeometry relative="1" x="0" as="geometry"><mxPoint x="0" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="D6" value="" style="outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;fillColor=#232F3E;dashed=0;verticalLabelPosition=middle;verticalAlign=bottom;align=center;html=1;whiteSpace=wrap;fontSize=10;fontStyle=1;spacing=3;shape=mxgraph.aws4.productIcon;prIcon=mxgraph.aws4.systems_manager;" vertex="1" parent="1"><mxGeometry x="1360" y="180" width="64" height="100" as="geometry"/></mxCell><mxCell id="D6_l" value="&lt;b&gt;D6 &#183; Run config&lt;br&gt;{&#946;, k, &#964;, &#963;, &#955;}&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5b6b7a&quot; style=&quot;font-size:9px&quot;&gt;the run&#39;s settings / dials&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1302" y="286" width="180" height="48" as="geometry"/></mxCell><mxCell id="TEL" value="" style="outlineConnect=0;fontColor=#232F3E;gradientColor=none;strokeColor=#ffffff;fillColor=#FF0000;dashed=0;verticalLabelPosition=middle;verticalAlign=bottom;align=center;html=1;whiteSpace=wrap;fontSize=10;fontStyle=1;spacing=3;shape=mxgraph.aws4.productIcon;prIcon=mxgraph.aws4.cloudwatch;" vertex="1" parent="1"><mxGeometry x="1360" y="370" width="64" height="100" as="geometry"/></mxCell><mxCell id="TEL_l" value="&lt;b&gt;Telemetry&lt;br&gt;rounds/tokens/entropy&lt;/b&gt;&lt;br&gt;&lt;font color=&quot;#5b6b7a&quot; style=&quot;font-size:9px&quot;&gt;run stats: time, cost, variety&lt;/font&gt;" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];strokeColor=none;fontStyle=1;" vertex="1" parent="1"><mxGeometry x="1302" y="476" width="180" height="48" as="geometry"/></mxCell><mxCell id="B3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=classic;html=1;jettySize=auto;strokeColor=#333;exitX=0.7;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="GRT" target="D6"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="176" y="156"/><mxPoint x="1454" y="156"/><mxPoint x="1454" y="230"/></Array></mxGeometry></mxCell><mxCell id="B3L" value="&lt;b&gt;B3&lt;/b&gt; pull run config" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="B3"><mxGeometry relative="1" x="0" as="geometry"><mxPoint x="0" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="C5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;endArrow=classic;html=1;jettySize=auto;strokeColor=#CC0000;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="AIS" target="TEL"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="1300" y="218"/><mxPoint x="1300" y="420"/></Array></mxGeometry></mxCell><mxCell id="C5L" value="&lt;b&gt;C5&lt;/b&gt; log run metrics" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="C5"><mxGeometry relative="1" x="0" as="geometry"><mxPoint x="0" y="-8" as="offset"/></mxGeometry></mxCell><mxCell id="genloop" style="endArrow=classic;html=1;rounded=1;strokeColor=#6a1b9a;exitX=0;exitY=0.3;exitDx=0;exitDy=0;entryX=0;entryY=0.7;entryDx=0;entryDy=0;" edge="1" parent="1" source="GRT" target="GRT"><mxGeometry relative="1" as="geometry"><Array as="points"><mxPoint x="86" y="198"/><mxPoint x="86" y="240"/></Array></mxGeometry></mxCell><mxCell id="genloopL" value="&lt;font color=&quot;#6a1b9a&quot;&gt;&#8635; evolve&lt;br&gt;P(&#956;) &#215;N gen&lt;/font&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="genloop"><mxGeometry relative="1" x="0" as="geometry"><mxPoint x="-40" y="0" as="offset"/></mxGeometry></mxCell><mxCell id="fromP1" value="&#9664; &lt;b&gt;from Phase 1 (Setup)&lt;/b&gt;: seeded pop P(&#956;) + config" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef7ee;strokeColor=#9ccc9c;fontSize=10;align=center;verticalAlign=middle;spacing=4;" vertex="1" parent="1"><mxGeometry x="55" y="138" width="250" height="26" as="geometry"/></mxCell><mxCell id="eP1" style="endArrow=classic;html=1;strokeColor=#5a8f5a;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.2;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="fromP1" target="GRT"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="toP3" value="&lt;b&gt;to Phase 3 (Evaluation)&lt;/b&gt; &#9654;&lt;br&gt;candidate triples for judging" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#eef2fb;strokeColor=#9db8d6;fontSize=10;align=center;verticalAlign=middle;spacing=4;" vertex="1" parent="1"><mxGeometry x="935" y="584" width="205" height="46" as="geometry"/></mxCell><mxCell id="eP3" style="endArrow=classic;html=1;strokeColor=#5a78a6;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="CANDc" target="toP3"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell><mxCell id="halo" value="" style="rounded=1;fillColor=none;strokeColor=#c77800;strokeWidth=2;dashed=1;html=1;" vertex="1" parent="1"><mxGeometry x="812" y="170" width="96" height="96" as="geometry"/></mxCell><mxCell id="novel" value="&#9733; &lt;b&gt;NOVEL&lt;/b&gt;: grounds in geometric shape-space &#8212; no prior work does this (bridge 1.3)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fdf3d6;strokeColor=#d9b45b;fontSize=10;align=center;verticalAlign=middle;spacing=4;" vertex="1" parent="1"><mxGeometry x="700" y="138" width="330" height="32" as="geometry"/></mxCell><mxCell id="eNov" style="endArrow=classic;html=1;strokeColor=#c77800;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="novel" target="GND"><mxGeometry relative="1" as="geometry"></mxGeometry></mxCell></root></mxGraphModel></diagram></mxfile>`;
+const STEPS=[{"t": "Press Next to build", "d": "The diagram assembles one step at a time; each real node and arrow comes alive as we reach it. Tip: click any icon to see what it does and how it connects.", "reveal": [], "pulse": [], "fit": false}, {"t": "From Phase 1", "d": "The process starts with a seeded population of candidate attacks (plus the run config) handed over from Phase&nbsp;1 (Setup).", "reveal": ["fromP1", "eP1"], "pulse": [], "fit": false}, {"t": "The red-team loop wakes up", "d": "GRT &mdash; the red-team coach &mdash; runs an evolutionary loop, improving a whole population over many generations.", "reveal": ["GRT", "genloop"], "pulse": [], "fit": false}, {"t": "Brief the attacker (A1)", "d": "GRT writes the attacker a plain-language brief: where the guard isn&rsquo;t looking, and how close to normal traffic to stay.", "reveal": ["SLM", "A1"], "pulse": [], "fit": false}, {"t": "Propose a mutation (A2) &mdash; the novel step", "d": "The attacker answers in words. GND&#9670; is the piece no prior work has: it grounds the loose idea in geometric shape-space.", "reveal": ["GND", "halo", "novel", "eNov", "A2"], "pulse": [], "fit": false}, {"t": "Ground &amp; score (A3)", "d": "GND&#9670; turns the idea into an exact, rule-checked triple and asks the immune system to score it.", "reveal": ["AIS", "A3"], "pulse": [], "fit": false}, {"t": "The verdict (A4)", "d": "AIS replies with edge_gap, self_margin, and whether the false-positive budget &#946; still holds.", "reveal": ["A4"], "pulse": [], "fit": false}, {"t": "Selection", "d": "GRT keeps only the top-&#956; candidates by fitness &mdash; edge_gap, self_margin and (from Phase&nbsp;3) realism, minus penalties.", "reveal": [], "pulse": ["GRT"], "fit": true}, {"t": "Warm-start from memory (B1 / C2)", "d": "GRT reads the best past attempts from ExpRAG so it never starts from scratch; each new trajectory is written back.", "reveal": ["D4", "E_D4"], "pulse": [], "fit": true}, {"t": "Consult the leaderboard (B2 / C3)", "d": "GRT reads the RSD bank &mdash; which attack styles have paid off &mdash; and updates it after probing.", "reveal": ["D2", "E_D2"], "pulse": [], "fit": true}, {"t": "Read the settings (B3)", "d": "GRT pulls the run&rsquo;s dials {&#946;, k, &#964;, &#963;, &#955;} from the run config.", "reveal": ["D6", "B3"], "pulse": [], "fit": true}, {"t": "Bank the candidate (C1)", "d": "Each promising evolved triple is written to the Candidate pool for the next stage to test.", "reveal": ["Cand", "E_C"], "pulse": [], "fit": true}, {"t": "Remember it (C2)", "d": "The full trajectory &mdash; parent, generation, reward &mdash; is appended to ExpRAG memory.", "reveal": [], "pulse": ["D4"], "fit": true}, {"t": "Update the leaderboard (C3)", "d": "The strategy embedding and its strength are updated in the RSD bank.", "reveal": [], "pulse": ["D2"], "fit": true}, {"t": "Log the blind spot (C4)", "d": "Any point the guard missed is recorded in the Holes repo &mdash; the defenders&rsquo; to-do list for later phases.", "reveal": ["D3", "E_D3"], "pulse": [], "fit": true}, {"t": "Log run metrics (C5)", "d": "Rounds, tokens and diversity are streamed to telemetry so progress can be tracked.", "reveal": ["Tel", "C5"], "pulse": [], "fit": true}, {"t": "Hand off to Phase 3", "d": "The banked candidates flow to Phase&nbsp;3 (Evaluation), where they are judged for realism and impact.", "reveal": ["toP3", "eP3"], "pulse": [], "fit": true}, {"t": "End to end", "d": "Coach &#8594; attacker &#8594; grounder &#8594; immune system &#8594; memory &amp; stores. The blind spots found here become the blue team&rsquo;s to-do list.", "reveal": [], "pulse": ["GND"], "fit": true}], N=STEPS.length-1;
+const FORMULA=(document.getElementById('fitness')||{}).innerHTML||'';
+const GRP={
+ GRT:['GRT','GRT_l'], SLM:['SLMA','SLMA_l'], GND:['GND','GND_l','guard'], AIS:['AIS','AIS_l'],
+ D4:['D4c','D4c_l','bD4'], D2:['D2c','D2c_l','bD2'], Cand:['CANDc','CANDc_l','bC'], D3:['D3c','D3c_l','bD3'],
+ D6:['D6','D6_l'], Tel:['TEL','TEL_l'], fromP1:['fromP1'], novel:['novel'], halo:['halo'], toP3:['toP3'],
+ A1:['A1','A1L'],A2:['A2','A2L'],A3:['A3','A3L'],A4:['A4','A4L'],
+ E_D4:['E_D4','E_D4L'],E_D2:['E_D2','E_D2L'],E_C:['E_C','E_CL'],B3:['B3','B3L'],
+ E_D3:['E_D3','E_D3L'],C5:['C5','C5L'],eP1:['eP1'],eNov:['eNov'],eP3:['eP3'],genloop:['genloop','genloopL']
+};
+const ALL=new Set(); Object.values(GRP).forEach(a=>a.forEach(i=>ALL.add(i)));
+const CELL2GRP={}; Object.entries(GRP).forEach(([g,a])=>a.forEach(c=>CELL2GRP[c]=g));
+const NODEINFO={
+ GRT:{title:"GRT · Genetic Red-Team", what:"The red-team coach. Each generation it briefs the attacker, grounds and scores the result, then keeps the strongest candidates — over a whole population, many rounds.",
+   incoming:["from Phase 1 — a seeded population + run settings, so it never starts from nothing","from AIS (A4) — a scorecard per candidate (catchable? normal-looking?), used to select winners","from D4 & D2 (B1/B2) — past winning attempts and a strategy leaderboard, to focus effort"],
+   outgoing:["to SLM-A (A1) — a plain-language brief on where the guard is blind","to Candidate pool (C1) — the promising evolved attacks","to D4/D2 (C2/C3) — new trajectories + updated strategy scores"]},
+ SLM:{title:"SLM-A · Attacker micro-agent", what:"A small AI that plays the attacker. It reads the brief and proposes, in everyday words, how to mutate the attack next.",
+   incoming:["from GRT (A1) — the brief: what is uncovered, and how close to normal to stay"],
+   outgoing:["to GND◆ (A2) — its proposed mutation, as a loose natural-language ‘vibe’"]},
+ GND:{title:"GND◆ · Vibe→AIS Grounder (novel)", what:"The translator, and the piece no prior work has. It turns the attacker’s loose words into one exact, rule-checked attack sample (a triple).",
+   incoming:["from SLM-A (A2) — the loose vibe intent"],
+   outgoing:["to AIS (A3) — a schema-valid triple ⟨srcZone, dstService, featureVec⟩ to be scored"],
+   note:"Guard: if it can’t parse the idea after k tries, it falls back to a plain GA mutation."},
+ AIS:{title:"AIS-IDS · Negative-selection engine", what:"The immune system / guard. It scores a proposed attack: is it catchable, is it too close to normal traffic, and does it stay within the false-positive budget?",
+   incoming:["from GND◆ (A3) — the exact triple to score"],
+   outgoing:["to GRT (A4) — the verdict: edge_gap, self_margin, β-check","to D3 (C4) — any attack it missed, logged as a hole","to Telemetry (C5) — run metrics"]},
+ D4:{title:"D4 · ExpRAG index", what:"Memory of past attempts — what was tried and how well it did — so good ideas can be reused.",
+   incoming:["from GRT (C2) — new trajectories {parent, gen, reward}"],
+   outgoing:["to GRT (B1) — top-k past trajectories to warm-start the next generation"]},
+ D2:{title:"D2 · RSD bank", what:"A leaderboard of attack styles — which strategies and regions have paid off.",
+   incoming:["from GRT (C3) — updated strategy embedding + strength"],
+   outgoing:["to GRT (B2) — the ranked distribution, to bias where to probe next"]},
+ Cand:{title:"Candidate pool", what:"A shortlist of freshly evolved attacks waiting to be tested.",
+   incoming:["from GRT (C1) — each promising triple + its provenance"],
+   outgoing:["to Phase 3 — the candidates, for evaluation and judging"]},
+ D3:{title:"D3 · Holes repo", what:"A list of blind spots — non-self points the guard failed to catch.",
+   incoming:["from AIS (C4) — each uncovered point {triple, nearestGap, selfMargin}"],
+   outgoing:["to the blue team (Phase 5) — the to-do list of gaps to patch"]},
+ D6:{title:"D6 · Run config", what:"The run’s settings / dials {β, k, τ, σ, λ} that govern strictness, retries and mutation.",
+   incoming:["set at Phase 1 (Setup)"],
+   outgoing:["to GRT (B3) — the parameters used every generation"]},
+ Tel:{title:"Telemetry", what:"Run statistics — rounds, tokens, diversity — so progress can be tracked.",
+   incoming:["from AIS (C5) — metrics each round"],
+   outgoing:["to the dashboard / logs"]},
+ fromP1:{title:"Handoff · from Phase 1 (Setup)", what:"Where the process begins.", outgoing:["to GRT — a seeded population P(μ) + run config"]},
+ toP3:{title:"Handoff · to Phase 3 (Evaluation)", what:"Where the process’s output goes.", incoming:["from Candidate pool — the banked triples to judge"]}
+};
+NODEINFO.novel=NODEINFO.halo=NODEINFO.GND;
+function hidePop(){const p=document.getElementById('pop'); if(p)p.classList.remove('on');}
+function showPop(info, me){
+ const p=document.getElementById('pop'); let h='<span class="cls" id="popx">&#10005;</span><div class="ph">'+info.title+'</div><div class="pw">'+info.what+'</div>';
+ if((info.incoming&&info.incoming.length)||(info.outgoing&&info.outgoing.length)){ h+='<table>';
+   (info.incoming||[]).forEach(t=>h+='<tr><td class="dir din">&#8592; in</td><td>'+t+'</td></tr>');
+   (info.outgoing||[]).forEach(t=>h+='<tr><td class="dir dout">&#8594; out</td><td>'+t+'</td></tr>'); h+='</table>'; }
+ if(info.note) h+='<div class="note">'+info.note+'</div>';
+ p.innerHTML=h;
+ const x=Math.min((me.clientX||120)+12, window.innerWidth-356), y=Math.min((me.clientY||120)+12, window.innerHeight-60);
+ p.style.left=x+'px'; p.style.top=y+'px'; p.classList.add('on');
+ const xb=document.getElementById('popx'); if(xb) xb.onclick=hidePop;
+}
+const $=s=>document.querySelector(s);
+let cur=0, graph=null, ready=false, sketch=false;
+console.log('[redteam] fresh load — state reset (cur=0, ready=false); no persisted state used');
+
+function cell(id){return graph.getModel().getCell(id);}
+function setVis(id,v){const c=cell(id); if(c) graph.getModel().setVisible(c,v);}
+function cumulative(n){const s=new Set();for(let i=0;i<=n;i++)STEPS[i].reveal.forEach(x=>s.add(x));return s;}
+
+function popNode(c){
+ const st=graph.view.getState(c); if(!st||!st.shape||!st.shape.node) return;
+ const node=st.shape.node;
+ if(node.parentNode&&node.parentNode.classList&&node.parentNode.classList.contains('poptmp')) return;
+ const NS='http://www.w3.org/2000/svg', w=document.createElementNS(NS,'g'); w.setAttribute('class','poptmp');
+ node.parentNode.insertBefore(w,node); w.appendChild(node);
+ const done=()=>{ try{ if(w.parentNode){ w.parentNode.insertBefore(node,w); w.parentNode.removeChild(w);} }catch(e){} };
+ w.addEventListener('animationend',done,{once:true}); setTimeout(done,900);
+ requestAnimationFrame(()=>w.classList.add('go'));
+}
+function drawEdge(c){
+ const st=graph.view.getState(c); if(!st||!st.shape||!st.shape.node) return;
+ const p=st.shape.node.querySelector('path'); if(!p) return;
+ let L; try{L=p.getTotalLength();}catch(e){return;}
+ // 1) base line draws on
+ p.style.transition='none'; p.style.strokeDasharray=L; p.style.strokeDashoffset=L;
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{ p.style.transition='stroke-dashoffset .55s ease'; p.style.strokeDashoffset=0; }));
+ // 2) glow pulse on the line itself
+ p.classList.remove('ewpulse'); void p.getBBox&&p.getBBox(); p.classList.add('ewpulse');
+ setTimeout(()=>p.classList.remove('ewpulse'),1000);
+ // 3) bright glowing comet that sweeps the whole edge
+ const o=p.cloneNode(true);
+ o.removeAttribute('marker-end'); o.removeAttribute('marker-start'); o.removeAttribute('class');
+ o.setAttribute('class','edgeflash');
+ const base=parseFloat(getComputedStyle(p).strokeWidth)||2.4;
+ o.style.stroke='#ffcf33'; o.style.fill='none'; o.style.strokeLinecap='round';
+ o.style.strokeWidth=(base+3.5)+'px';
+ o.style.filter='drop-shadow(0 0 7px #ffcf33)';
+ const seg=Math.max(26, L*0.24);
+ o.style.strokeDasharray=seg+' '+(L+seg);
+ o.style.strokeDashoffset=(L+seg);
+ o.style.opacity='1';
+ p.parentNode.appendChild(o);
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{
+   o.style.transition='stroke-dashoffset .9s cubic-bezier(.35,.1,.25,1), opacity .35s ease .65s';
+   o.style.strokeDashoffset=(-seg);
+   o.style.opacity='0';
+ }));
+ setTimeout(()=>{ if(o.parentNode) o.parentNode.removeChild(o); }, 1300);
+}
+function flash(c){
+ const st=graph.view.getState(c); if(!st||!st.shape||!st.shape.node) return;
+ const n=st.shape.node; n.classList.remove('gflash'); void n.getBBox&&n.getBBox(); n.classList.add('gflash'); setTimeout(()=>n.classList.remove('gflash'),1100);
+}
+function render(){
+ const st=STEPS[cur];
+ try{ console.log('[redteam] step', cur+'/'+N, '—', (st.t||'').replace(/&[^;]+;/g,'')); }catch(e){}
+ $('#stTitle').innerHTML=st.t; $('#stDesc').innerHTML=st.d;
+ $('#count').textContent=cur+' / '+N; $('#bar').style.width=(cur/N*100)+'%';
+ $('#prev').disabled=cur===0; $('#next').disabled=cur===N;
+ const box=$('#fitness');
+ if(cur===0){ box.classList.remove('on'); }
+ else { box.classList.add('on'); box.innerHTML = (/^Selection/i.test(st.t)) ? FORMULA : ('<b>&#9654; '+st.t+'</b> &mdash; '+st.d); }
+ if(!ready) return;
+ const shown=cumulative(cur);
+ graph.getModel().beginUpdate();
+ try{ ALL.forEach(id=>setVis(id,false)); shown.forEach(g=>(GRP[g]||[]).forEach(id=>setVis(id,true))); }
+ finally{ graph.getModel().endUpdate(); }
+ requestAnimationFrame(()=>requestAnimationFrame(()=>{
+   st.reveal.forEach(g=>(GRP[g]||[]).forEach(id=>{const c=cell(id); if(!c)return; c.edge?drawEdge(c):popNode(c);}));
+   st.pulse.forEach(g=>(GRP[g]||[]).forEach(id=>{const c=cell(id); if(c)flash(c);}));
+ }));
+}
+$('#next').onclick=()=>{hidePop();if(cur<N){cur++;render();}};
+$('#prev').onclick=()=>{hidePop();if(cur>0){cur--;render();}};
+$('#reset').onclick=()=>{hidePop();cur=0;render();};
+function setSketch(on){
+ sketch=on;
+ if(graph){
+   graph.setCellsEditable(on);         // double-click edits node/edge text
+   graph.setConnectable(on);           // draw new edges
+   graph.setCellsResizable(on);        // resize shapes
+   if(graph.setCellsDisconnectable) graph.setCellsDisconnectable(on);  // rewire edge ends
+   if(graph.setAllowDanglingEdges) graph.setAllowDanglingEdges(on);
+ }
+ const b=document.getElementById('sketch');
+ if(b){ b.innerHTML = on ? '&#9998; Sketch: on' : '&#9998; Sketch: off'; b.classList.toggle('active', on); }
+ console.log('[redteam] sketch mode', on?'ON — edit / delete / rewire enabled':'off — presentation');
+}
+document.getElementById('sketch').onclick=()=>setSketch(!sketch);
+document.addEventListener('keydown', function(e){
+ if(!sketch || !graph) return;
+ if(e.key==='Delete' || e.key==='Backspace'){
+   const t=e.target; if(t && (t.isContentEditable || /INPUT|TEXTAREA/.test(t.tagName||''))) return;
+   const cells=graph.getSelectionCells(); if(cells && cells.length){ graph.removeCells(cells, true); e.preventDefault(); }
+ }
+});
+document.addEventListener('keydown',e=>{ var _t=e.target; if(_t && (_t.tagName==='TEXTAREA'||_t.tagName==='INPUT'||_t.isContentEditable)) return; if(e.key==='ArrowRight'||e.key===' '){e.preventDefault();$('#next').click();} if(e.key==='ArrowLeft'){e.preventDefault();$('#prev').click();} if(e.key==='Escape'){hidePop();} });
+document.querySelectorAll('.fab button').forEach(b=>b.onclick=()=>{ const id=b.dataset.c,p=document.getElementById(id),open=p.classList.contains('open');
+ document.querySelectorAll('.console').forEach(c=>c.classList.remove('open')); document.querySelectorAll('.fab button').forEach(x=>x.classList.remove('active'));
+ if(!open){p.classList.add('open');b.classList.add('active');} });
+document.querySelectorAll('[data-close]').forEach(x=>x.onclick=()=>{ document.querySelectorAll('.console').forEach(c=>c.classList.remove('open')); document.querySelectorAll('.fab button').forEach(b=>b.classList.remove('active')); });
+
+function fitCenter(){
+ try{
+   const el=document.getElementById('graph');
+   const cw=el.clientWidth, ch=el.clientHeight, pad=34;
+   graph.view.scaleAndTranslate(1,0,0);
+   const b=graph.getGraphBounds(); if(!b||!b.width){return;}
+   const s=Math.min((cw-2*pad)/b.width,(ch-2*pad)/b.height);
+   const tx=(cw - b.width*s)/2/s - b.x, ty=(ch - b.height*s)/2/s - b.y;
+   graph.view.scaleAndTranslate(s,tx,ty);
+ }catch(e){}
+}
+let editorEl=null, editingCell=null;
+function stopLabelEdit(commit){
+ if(!editorEl) return;
+ const v=editorEl.value, c=editingCell, el=editorEl;
+ editorEl=null; editingCell=null;
+ try{ el.remove(); }catch(e){}
+ if(commit && c){ try{ graph.getModel().setValue(c, v); }catch(e){} }
+}
+function editableCellFor(c){
+ if(c && c.value!=null && typeof c.value==='string' && c.value.trim()!=='') return c;   // has its own text
+ const g=CELL2GRP[c.id];                                                                // else edit the label in same node group
+ if(g && GRP[g]){ for(const id of GRP[g]){ const cc=cell(id); if(cc && typeof cc.value==='string' && cc.value.trim()!=='') return cc; } }
+ return c;
+}
+function startLabelEdit(cell){
+ stopLabelEdit(true);
+ const st=graph.view.getState(cell); if(!st) return;
+ const isEdge=!!cell.edge;
+ const node = isEdge ? ((st.text&&st.text.node)||(st.shape&&st.shape.node))
+                     : ((st.shape&&st.shape.node)||(st.text&&st.text.node));
+ if(!node) return;
+ const r=node.getBoundingClientRect();
+ let val=(cell.value!=null && typeof cell.value==='string') ? cell.value : (graph.convertValueToString(cell)||'');
+ const inp=document.createElement('textarea');
+ inp.className='sketch-edit'; inp.spellcheck=false; inp.value=val;
+ const w=Math.min(Math.max(r.width||140, 90), 300);   // tiny box, capped
+ const h=Math.min(Math.max(r.height||24, 22), 40);
+ inp.style.width=w+'px'; inp.style.height=h+'px';
+ inp.style.left=Math.max(6, Math.min(r.left, window.innerWidth - w - 10))+'px';
+ inp.style.top =Math.max(6, Math.min(r.top,  window.innerHeight - h - 10))+'px';
+ document.body.appendChild(inp); inp.focus(); inp.select();
+ editorEl=inp; editingCell=cell;
+ inp.addEventListener('keydown', function(e){
+   e.stopPropagation();                       // keep space / arrows / delete inside the editor
+   if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); stopLabelEdit(true); }
+   else if(e.key==='Escape'){ e.preventDefault(); stopLabelEdit(false); }
+ });
+ inp.addEventListener('blur', function(){ stopLabelEdit(true); });
+}
+function boot(){
+ console.log('[redteam] boot: creating graph + decoding diagram');
+ const container=document.getElementById('graph');
+ try{ mxEvent.disableContextMenu(container); }catch(e){}
+ graph = (typeof Graph!=='undefined') ? new Graph(container) : new mxGraph(container);
+ graph.setPanning(false);
+ graph.setConnectable(false);
+ graph.setCellsResizable(false);
+ graph.setCellsEditable(false);
+ if(graph.setAllowDanglingEdges) graph.setAllowDanglingEdges(false);
+ if(graph.setDropEnabled) graph.setDropEnabled(false);
+ if(graph.setTooltips) graph.setTooltips(false);
+ graph.setEnabled(true);
+ graph.setCellsMovable(true);
+ graph.setCellsSelectable(true);
+ graph.isCellMovable=function(){return true;};          // every node/edge draggable
+ graph.isCellLocked=function(){return false;};
+ // stop mxGraph from inserting a stray text on double-click; only edit labels in sketch mode
+ graph.dblClick=function(evt, cell){
+   if(!sketch){ if(evt){ mxEvent.consume(evt); } return; }
+   if(cell!=null){ startLabelEdit(editableCellFor(cell)); }
+   if(evt){ mxEvent.consume(evt); }
+ };
+ // decode the exact drawio into the live model
+ graph.getModel().beginUpdate();
+ try{
+   const doc=mxUtils.parseXml(XML);
+   const codec=new mxCodec(doc);
+   codec.decode(doc.getElementsByTagName('mxGraphModel')[0], graph.getModel());
+ } finally { graph.getModel().endUpdate(); }
+ try{ console.log('[redteam] decoded cells:', Object.keys(graph.getModel().cells||{}).length); }catch(e){}
+ // never clip dragged shapes
+ container.style.overflow='visible';
+ const svg=container.querySelector('svg'); if(svg){ svg.style.overflow='visible'; }
+ fitCenter();
+ ready=true; document.getElementById('loading').style.display='none';
+ console.log('[redteam] ready: graph live, click + drag enabled');
+ render();
+ graph.addListener(mxEvent.CLICK, function(sender, evt){
+   var cell=evt.getProperty('cell'); var me=evt.getProperty('event');
+   if(!cell){ hidePop(); return; }
+   var info = NODEINFO[CELL2GRP[cell.id]];
+   if(info && me){ showPop(info, me); } else { hidePop(); }
+ });
+ let rt; window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(fitCenter,120);});
+}
+function libReady(){ return (typeof Graph!=='undefined')||(typeof mxGraph!=='undefined'); }
+if(libReady()){ console.log('[redteam] library ready at parse — booting'); boot(); }
+else { console.log('[redteam] waiting for library load…'); window.addEventListener('load', ()=>{ libReady()?boot():(document.getElementById('loading').textContent='Graph library did not load (needs internet).'); }); }
+render();
+
+/* ---- freehand whiteboard overlay ---- */
+(function(){
+ const cv=document.getElementById('annot'); if(!cv) return; const ctx=cv.getContext('2d');
+ let dpr=Math.max(1,window.devicePixelRatio||1);
+ function resize(){
+   let img=null; try{ if(cv.width) img=ctx.getImageData(0,0,cv.width,cv.height); }catch(e){}
+   dpr=Math.max(1,window.devicePixelRatio||1);
+   cv.width=Math.floor(innerWidth*dpr); cv.height=Math.floor(innerHeight*dpr);
+   cv.style.width=innerWidth+'px'; cv.style.height=innerHeight+'px';
+   ctx.setTransform(dpr,0,0,dpr,0,0); ctx.lineCap='round'; ctx.lineJoin='round';
+   if(img){ try{ ctx.putImageData(img,0,0); }catch(e){} }
+ }
+ resize(); window.addEventListener('resize',resize);
+ let on=false, erasing=false, color='#d83a2f', size=3, drawingNow=false, lx=0, ly=0;
+ function setDraw(v){ on=v; cv.style.pointerEvents=v?'auto':'none';
+   const b=document.getElementById('draw'); if(b){ b.innerHTML=v?'&#9998; Draw: on':'&#9998; Draw: off'; b.classList.toggle('active',v); }
+   document.body.style.cursor=v?'crosshair':''; console.log('[redteam] draw mode', v?'ON':'off'); }
+ function updEr(){ const b=document.getElementById('eraser'); if(b) b.classList.toggle('active',erasing); }
+ document.getElementById('draw').onclick=()=>setDraw(!on);
+ document.getElementById('pencolor').oninput=e=>{ color=e.target.value; erasing=false; updEr(); };
+ document.getElementById('pensize').oninput=e=>{ size=+e.target.value; };
+ document.getElementById('eraser').onclick=()=>{ erasing=!erasing; updEr(); if(!on) setDraw(true); };
+ document.getElementById('clearink').onclick=()=>{ ctx.clearRect(0,0,innerWidth,innerHeight); };
+ function stroke(x0,y0,x1,y1){
+   ctx.globalCompositeOperation=erasing?'destination-out':'source-over';
+   ctx.strokeStyle=color; ctx.lineWidth=erasing?Math.max(size*4,16):size;
+   ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+ }
+ cv.addEventListener('pointerdown',e=>{ if(!on)return; drawingNow=true; lx=e.clientX; ly=e.clientY;
+   stroke(lx,ly,lx+0.01,ly+0.01); try{cv.setPointerCapture(e.pointerId);}catch(_){} e.preventDefault(); });
+ cv.addEventListener('pointermove',e=>{ if(!drawingNow)return; stroke(lx,ly,e.clientX,e.clientY); lx=e.clientX; ly=e.clientY; e.preventDefault(); });
+ cv.addEventListener('pointerup',e=>{ drawingNow=false; try{cv.releasePointerCapture(e.pointerId);}catch(_){} });
+ cv.addEventListener('pointercancel',()=>{ drawingNow=false; });
+})();
+
+</script>
+</body>
+</html>
